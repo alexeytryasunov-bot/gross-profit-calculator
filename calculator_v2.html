@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#11233c">
+  <meta name="description" content="Калькулятор валовой прибыли без НДС с сохраняемой историей расчётов. Работает без интернета.">
+  <title>Калькулятор валовой прибыли</title>
+  <style>
+    :root { color-scheme: light; --bg: #f1f5f9; --ink: #15243b; --muted: #62748b; --line: #dce5ee; --blue: #1765bd; --blue-dark: #0b4c94; --green: #087d54; --red: #b42332; --white: #fff; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: linear-gradient(180deg, #11233c 0, #183657 210px, var(--bg) 210px); font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: var(--ink); }
+    .shell { width: min(100% - 32px, 680px); margin: 0 auto; padding: 36px 0 56px; }
+    header { color: white; padding: 0 4px 28px; }
+    .eyebrow { display: block; color: #c0d8ef; font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 9px; }
+    h1 { font-size: clamp(25px, 5.8vw, 35px); line-height: 1.14; margin: 0 0 10px; letter-spacing: -.025em; }
+    header p { margin: 0; color: #d6e3ee; font-size: 14px; line-height: 1.5; }
+    .card { background: var(--white); border-radius: 19px; box-shadow: 0 14px 35px rgba(9, 30, 57, .11); padding: clamp(20px, 5vw, 32px); }
+    h2 { font-size: 17px; margin: 0 0 20px; letter-spacing: -.01em; }
+    .field { margin-bottom: 19px; }
+    label { display: block; font-weight: 650; font-size: 14px; margin-bottom: 9px; }
+    /* По требованию: поле ввода (вместе с кнопкой ± и ₽) имеет ровно 50% прежней ширины. */
+    .input-wrap { position: relative; width: 50%; }
+    input { appearance: none; width: 100%; border: 1.5px solid #cbd6e3; background: #fff; color: var(--ink); border-radius: 12px; font-size: 20px; padding: 15px 46px 15px 62px; font-variant-numeric: tabular-nums; outline: none; transition: border-color .15s, box-shadow .15s; }
+    input:focus-visible { border-color: var(--blue); box-shadow: 0 0 0 4px rgba(23, 101, 189, .13); }
+    /* Недопустимое значение выделяется красным — и на самом поле, и в сообщении. */
+    .field.invalid label, .field.invalid .hint { color: var(--red); }
+    .field.invalid input, .field.invalid input:focus-visible {
+      border-color: var(--red);
+      background: #fff6f6;
+      box-shadow: 0 0 0 4px rgba(180, 35, 50, .12);
+    }
+    .field.invalid .sign-toggle { color: var(--red); background: #ffe4e6; }
+    .rub { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); font-size: 20px; color: var(--muted); pointer-events: none; }
+    .hint { display: block; color: var(--muted); font-size: 12px; line-height: 1.45; margin: 7px 0 0; }
+    .actions { display: flex; gap: 10px; margin-top: 24px; }
+    button { font-family: inherit; cursor: pointer; border-radius: 12px; border: 0; font-size: 15px; font-weight: 750; min-height: 49px; padding: 13px 16px; }
+    .sign-toggle { position: absolute; z-index: 1; top: 50%; left: 8px; transform: translateY(-50%); width: 42px; height: 42px; min-height: 42px; padding: 0; background: #e9f0f6; color: #38506a; font-size: 24px; line-height: 42px; text-align: center; }
+    .sign-toggle:active { background: #d6e5f3; }
+    .primary { color: white; background: var(--blue); flex: 1; }
+    .primary:hover { background: var(--blue-dark); }
+    .secondary { color: #38506a; background: #e9f0f6; }
+    button:focus-visible { outline: 3px solid #86bbef; outline-offset: 2px; }
+    .error { display: none; margin: 18px 0 0; border: 1px solid #f3c4c8; background: #fff1f2; color: #971f2e; padding: 13px 15px; border-radius: 11px; font-size: 14px; line-height: 1.45; }
+    .error.active { display: block; }
+    .results { margin-top: 25px; padding-top: 24px; border-top: 1px solid var(--line); }
+    .results h2 { margin-bottom: 15px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }
+    .markup-box { grid-column: auto; }
+    /* Каждая карточка результатов — половина ширины прежней строки. */
+    .result-box { display: block; background: #f4f7fb; border: 1px solid #e4ebf3; border-radius: 13px; padding: 14px 12px; min-width: 0; }
+    .result-summary { display: block; cursor: pointer; list-style: none; outline-offset: 4px; }
+    .result-summary::-webkit-details-marker { display: none; }
+    .result-summary::marker { content: ''; }
+    .result-summary:focus-visible { outline: 2px solid var(--blue); border-radius: 4px; }
+    .formula-toggle-hint { display: block; margin-top: 9px; font-size: 11px; font-weight: 650; color: #1765bd; }
+    .formula-toggle-hint::after { content: ' ▾'; }
+    .result-box[open] .formula-toggle-hint::after { content: ' ▴'; }
+    .formula-inline { margin-top: 10px; padding-top: 10px; border-top: 1px solid #dce5ee; color: #455b73; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+    .formula-inline strong { color: var(--ink); }
+    .result-box[open] { border-color: #a8cbef; background: #f0f6ff; }
+    .result-label { font-size: 12px; line-height: 1.5; color: #51647a; display: block; margin-bottom: 10px; }
+    .result-value { display: block; font-size: clamp(16px, 3.8vw, 24px); line-height: 1.3; letter-spacing: -.025em; font-weight: 800; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .result-value.good { color: var(--green); }
+    .result-value.bad { color: var(--red); }
+    .result-note { font-size: 12px; line-height: 1.5; color: var(--muted); margin: 14px 0 0; }
+    .history { margin-top: 25px; padding-top: 24px; border-top: 1px solid var(--line); }
+    .history-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+    .history-head h2 { margin: 0; }
+    .history-head button { min-height: 42px; padding: 10px 12px; font-size: 13px; }
+    .history-head button:disabled { opacity: .48; cursor: not-allowed; }
+    .history-empty { font-size: 13px; color: var(--muted); margin: 0; }
+    /* Исторические карточки в два столбца: теперь каждая занимает половину ширины. */
+    #historyList { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .history-record { border: 1px solid var(--line); background: #f8fafc; border-radius: 12px; padding: 12px 10px; min-width: 0; }
+    .history-record h3 { font-size: 14px; margin: 0 0 10px; }
+    .history-record dl { display: block; margin: 0; font-size: 13px; }
+    .history-record dt { color: #51647a; font-size: 11px; line-height: 1.32; margin: 10px 0 3px; overflow-wrap: anywhere; }
+    .history-record dt:first-child { margin-top: 0; }
+    .history-record dd { margin: 0; text-align: left; font-size: 13px; line-height: 1.35; font-weight: 750; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .history-record dd.bad { color: var(--red); }
+    .history-record dd.good { color: var(--green); }
+    .history-empty { grid-column: 1 / -1; }
+    .history .error { margin-top: 0; margin-bottom: 14px; }
+    .footer { margin-top: 18px; text-align: center; font-size: 12px; color: var(--muted); line-height: 1.5; }
+    @media (max-width: 440px) {
+      /* Компактные элементы оставляют число читаемым при уменьшенной ширине поля. */
+      input { font-size: 15px; padding: 15px 21px 15px 43px; }
+      .sign-toggle { left: 5px; width: 33px; height: 39px; min-height: 39px; line-height: 39px; font-size: 21px; }
+      .rub { right: 6px; font-size: 15px; }
+      .history-record dd { font-size: 12px; }
+    }
+    @media (max-width: 440px) {
+      .shell { width: min(100% - 24px, 680px); padding-top: 30px; }
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .result-box { padding: 12px 10px; }
+      .result-label { font-size: 11px; }
+      .result-value { font-size: 17px; }
+      .actions { flex-wrap: wrap; }
+      .secondary { min-width: 112px; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <span class="eyebrow">Финансовые инструменты</span>
+      <h1>Калькулятор валовой прибыли</h1>
+      <p>Точный расчёт прибыли и рентабельности продаж для торгового предприятия.</p>
+    </header>
+
+    <section class="card" aria-label="Расчёт валовой прибыли">
+      <h2>Исходные данные</h2>
+      <form id="calculator" novalidate>
+        <div class="field">
+          <label for="revenue">Выручка без НДС</label>
+          <div class="input-wrap">
+            <button type="button" class="sign-toggle" data-input="revenue" aria-label="Поставить или убрать минус у выручки" title="Поменять знак">±</button>
+            <input id="revenue" name="revenue" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" aria-describedby="revenueHint" required>
+            <span class="rub" aria-hidden="true">₽</span>
+          </div>
+          <small class="hint" id="revenueHint">Сумма выручки от продажи товара</small>
+        </div>
+        <div class="field">
+          <label for="cost">Себестоимость проданного товара без НДС</label>
+          <div class="input-wrap">
+            <button type="button" class="sign-toggle" data-input="cost" aria-label="Поставить или убрать минус у себестоимости" title="Поменять знак">±</button>
+            <input id="cost" name="cost" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" required>
+            <span class="rub" aria-hidden="true">₽</span>
+          </div>
+          <small class="hint">Допускаются запятая или точка и не более двух знаков после них</small>
+        </div>
+        <div class="actions">
+          <button type="submit" class="primary">Рассчитать</button>
+          <button type="button" class="secondary" id="clear">Очистить</button>
+        </div>
+      </form>
+
+      <div id="error" class="error" role="alert" aria-live="assertive"></div>
+
+      <section class="results" aria-label="Результаты расчёта" aria-live="polite" aria-atomic="true">
+        <h2>Результат</h2>
+        <div class="grid">
+          <details class="result-box">
+            <summary class="result-summary" title="Нажмите, чтобы увидеть формулу валовой прибыли">
+              <span class="result-label">Валовая прибыль</span>
+              <output id="profit" class="result-value">—</output>
+              <span class="formula-toggle-hint">Формула</span>
+            </summary>
+            <div class="formula-inline"><strong>Валовая прибыль</strong> = Выручка − Себестоимость.</div>
+          </details>
+          <details class="result-box">
+            <summary class="result-summary" title="Нажмите, чтобы увидеть формулу маржи">
+              <span class="result-label">Валовая рентабельность продаж (маржа)</span>
+              <output id="margin" class="result-value">—</output>
+              <span class="formula-toggle-hint">Формула</span>
+            </summary>
+            <div class="formula-inline"><strong>Маржа (%)</strong> = Валовая прибыль ÷ Выручка × 100. При выручке 0 — «Не определяется».</div>
+          </details>
+          <details class="result-box markup-box">
+            <summary class="result-summary" title="Нажмите, чтобы увидеть формулу наценки">
+              <span class="result-label">Наценка (%)</span>
+              <output id="markup" class="result-value">—</output>
+              <span class="formula-toggle-hint">Формула</span>
+            </summary>
+            <div class="formula-inline"><strong>Наценка (%)</strong> = Валовая прибыль ÷ Себестоимость × 100. При себестоимости 0 — 0,00% по принятому правилу.</div>
+          </details>
+        </div>
+        <p id="status" class="result-note">Введите исходные данные и нажмите «Рассчитать».</p>
+      </section>
+      <section class="history" aria-label="История расчётов">
+        <div class="history-head">
+          <h2 id="historyTitle">История расчётов</h2>
+          <button id="clearHistory" type="button" class="secondary" disabled>Очистить историю</button>
+        </div>
+        <div id="historyError" class="error" role="alert"></div>
+        <div id="historyList">
+          <p class="history-empty">История пока пуста.</p>
+        </div>
+      </section>
+    </section>
+    <p class="footer">Все суммы без НДС. Расчёты выполняются в копейках без ошибок двоичной арифметики. Работает без подключения к интернету.</p>
+  </main>
+
+  <script>
+    "use strict";
+    // Надёжное открытие формул по нажатию (включая сенсорные браузеры Android).
+    document.querySelectorAll('.result-summary').forEach(function(summary) {
+      summary.addEventListener('click', function(event) {
+        event.preventDefault();
+        summary.parentElement.open = !summary.parentElement.open;
+      });
+    });
+    const form = document.getElementById('calculator');
+    const revenueInput = document.getElementById('revenue');
+    const costInput = document.getElementById('cost');
+    const profitOutput = document.getElementById('profit');
+    const marginOutput = document.getElementById('margin');
+    const markupOutput = document.getElementById('markup');
+    const errorOutput = document.getElementById('error');
+    const statusOutput = document.getElementById('status');
+    const historyList = document.getElementById('historyList');
+    const historyTitle = document.getElementById('historyTitle');
+    const clearHistoryButton = document.getElementById('clearHistory');
+    const historyError = document.getElementById('historyError');
+    const HISTORY_KEY = 'gross_profit_calculator_history_v1';
+    let historyEntries = [];
+    let storageReady = false;
+
+    function showHistoryError(message) {
+      historyError.textContent = message;
+      historyError.classList.add('active');
+    }
+    function clearHistoryError() {
+      historyError.textContent = '';
+      historyError.classList.remove('active');
+    }
+    function renderHistory() {
+      historyList.replaceChildren();
+      historyTitle.textContent = 'История расчётов (' + historyEntries.length + ')';
+      clearHistoryButton.disabled = !storageReady || historyEntries.length === 0;
+      if (historyEntries.length === 0) {
+        const p = document.createElement('p');
+        p.className = 'history-empty';
+        p.textContent = 'История пока пуста.';
+        historyList.appendChild(p);
+        return;
+      }
+      // Новые записи первыми. Вывод только через textContent, без вставки HTML из хранилища.
+      historyEntries.slice().reverse().forEach(function(entry, reverseIndex) {
+        const article = document.createElement('article');
+        article.className = 'history-record';
+        const heading = document.createElement('h3');
+        heading.textContent = 'Расчёт №' + (historyEntries.length - reverseIndex);
+        article.appendChild(heading);
+        const dl = document.createElement('dl');
+        const labels = [
+          ['revenue', 'Выручка без НДС'],
+          ['cost', 'Себестоимость без НДС'],
+          ['profit', 'Валовая прибыль'],
+          ['margin', 'Маржа'],
+          ['markup', 'Наценка']
+        ];
+        labels.forEach(function(item) {
+          const dt = document.createElement('dt');
+          dt.textContent = item[1];
+          const dd = document.createElement('dd');
+          dd.textContent = String(entry[item[0]] ?? '—');
+          if (item[0] === 'profit' && dd.textContent.startsWith('−')) dd.classList.add('bad');
+          dl.appendChild(dt);
+          dl.appendChild(dd);
+        });
+        article.appendChild(dl);
+        historyList.appendChild(article);
+      });
+    }
+    function loadHistory() {
+      try {
+        const saved = window.localStorage.getItem(HISTORY_KEY);
+        const parsed = saved === null ? [] : JSON.parse(saved);
+        if (!Array.isArray(parsed) || !parsed.every(function(row) {
+          return row && typeof row === 'object' && ['revenue','cost','profit','margin','markup'].every(function(key) {
+            return typeof row[key] === 'string';
+          });
+        })) throw new Error('Некорректная история');
+        historyEntries = parsed;
+        storageReady = true;
+        clearHistoryError();
+      } catch (err) {
+        storageReady = false;
+        showHistoryError('Не удалось открыть хранилище истории в этом браузере. Возможно, доступ к localStorage для скачанного HTML-файла ограничен. Попробуйте открыть этот же файл в обычном браузере с разрешённым хранением данных.');
+      }
+      renderHistory();
+    }
+    function saveHistory(entry) {
+      if (!storageReady) {
+        showHistoryError('История не сохранена: браузер не предоставляет доступ к localStorage для этого файла.');
+        return;
+      }
+      try {
+        const updated = historyEntries.concat([entry]);
+        window.localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+        historyEntries = updated;
+        clearHistoryError();
+        renderHistory();
+      } catch (err) {
+        showHistoryError('История не сохранена: браузер заблокировал хранилище или в нём закончилось место.');
+      }
+    }
+    clearHistoryButton.addEventListener('click', function() {
+      if (!storageReady || historyEntries.length === 0) return;
+      if (!window.confirm('Удалить всю историю расчётов? Это действие нельзя отменить.')) return;
+      try {
+        window.localStorage.removeItem(HISTORY_KEY);
+        historyEntries = [];
+        clearHistoryError();
+        renderHistory();
+      } catch (err) {
+        showHistoryError('Не удалось удалить историю. Хранилище браузера недоступно.');
+      }
+    });
+    loadHistory();
+
+    // Безопасный точный разбор денежных сумм: все значения хранятся как целые копейки (BigInt).
+    function parseRubles(input, fieldName, fieldInput) {
+      const cleaned = input.replace(/[\s\u00a0\u202f]/g, '').trim();
+      if (cleaned.length === 0) throw fieldError('Введите значение поля «' + fieldName + '».', fieldInput);
+      if (/^[-−]/.test(cleaned)) {
+        throw fieldError('Поле «' + fieldName + '»: отрицательная сумма недопустима. Проверьте введённые данные.', fieldInput);
+      }
+      if (!/^\d{1,15}(?:[.,]\d{1,2})?$/.test(cleaned)) {
+        throw fieldError('Проверьте поле «' + fieldName + '»: введите неотрицательную сумму с точностью до копеек (не более 15 цифр до запятой).', fieldInput);
+      }
+      const parts = cleaned.replace(',', '.').split('.');
+      const kopecks = BigInt(parts[0]) * 100n + BigInt((parts[1] || '').padEnd(2, '0'));
+      return kopecks;
+    }
+
+    function grouped(integerText) {
+      return integerText.replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
+    }
+
+    function formatMoney(kopecks) {
+      const negative = kopecks < 0n;
+      const abs = negative ? -kopecks : kopecks;
+      const whole = (abs / 100n).toString();
+      const remainder = (abs % 100n).toString().padStart(2, '0');
+      return (negative ? '−' : '') + grouped(whole) + ',' + remainder + '\u00a0₽';
+    }
+
+    // Округление «до ближайшего, половина вверх» для знаковых значений.
+    function roundedDivision(numerator, denominator) {
+      const negative = (numerator < 0n) !== (denominator < 0n);
+      const n = numerator < 0n ? -numerator : numerator;
+      const d = denominator < 0n ? -denominator : denominator;
+      const quotient = (n + d / 2n) / d;
+      return negative ? -quotient : quotient;
+    }
+
+    // margin * 100 (два знака после запятой): profit / revenue * 10000
+    function formatPercent(marginHundredths) {
+      const negative = marginHundredths < 0n;
+      const abs = negative ? -marginHundredths : marginHundredths;
+      return (negative ? '−' : '') + grouped((abs / 100n).toString()) + ',' + (abs % 100n).toString().padStart(2, '0') + '\u00a0%';
+    }
+
+    // Маржу показываем с двумя знаками, кроме случая, когда настоящая маржа
+    // меньше 100%, но двух знаков не хватает и получилось бы ложное 100,00%.
+    // Все вычисления — точные целочисленные, без Number/плавающей точки.
+    function formatMargin(profit, revenue) {
+      // Выручка 0 обрабатывается в основном обработчике до вызова функции.
+      for (let decimals = 2; decimals <= 18; decimals++) {
+        const scale = 10n ** BigInt(decimals);
+        const scaled = roundedDivision(profit * 100n * scale, revenue);
+        if (profit >= revenue || scaled < 100n * scale) {
+          const negative = scaled < 0n;
+          const abs = negative ? -scaled : scaled;
+          const whole = (abs / scale).toString();
+          const fraction = (abs % scale).toString().padStart(decimals, '0');
+          return (negative ? '−' : '') + grouped(whole) + ',' + fraction + '\u00a0%';
+        }
+      }
+      // При допустимых суммах (до 15 цифр в рублях) 18 знаков достаточно.
+      throw new Error('Недостаточная точность расчёта маржи.');
+    }
+
+    function fieldError(message, input) {
+      const error = new Error(message);
+      error.fieldInput = input;
+      return error;
+    }
+
+    function resetResults(message) {
+      profitOutput.textContent = '—';
+      marginOutput.textContent = '—';
+      markupOutput.textContent = '—';
+      profitOutput.className = 'result-value';
+      marginOutput.className = 'result-value';
+      markupOutput.className = 'result-value';
+      statusOutput.textContent = message || 'Введите исходные данные и нажмите «Рассчитать».';
+    }
+
+    function showError(message, fieldInput) {
+      errorOutput.textContent = message;
+      errorOutput.classList.add('active');
+      if (fieldInput) {
+        fieldInput.closest('.field').classList.add('invalid');
+        fieldInput.setAttribute('aria-invalid', 'true');
+        fieldInput.setAttribute('aria-errormessage', 'error');
+      }
+      resetResults('Расчёт не выполнен. Исправьте исходные данные.');
+    }
+
+    function clearError() {
+      errorOutput.textContent = '';
+      errorOutput.classList.remove('active');
+      [revenueInput, costInput].forEach(function(input) {
+        input.closest('.field').classList.remove('invalid');
+        input.removeAttribute('aria-invalid');
+        input.removeAttribute('aria-errormessage');
+      });
+    }
+
+    form.addEventListener('submit', function(event) {
+      event.preventDefault();
+      clearError();
+      try {
+        const revenue = parseRubles(revenueInput.value, 'Выручка без НДС', revenueInput);
+        const cost = parseRubles(costInput.value, 'Себестоимость без НДС', costInput);
+        if (revenue === 0n) {
+          showError('Выручка равна нулю. Расчёт невозможен: запись не используется.', revenueInput);
+          marginOutput.textContent = 'Не определяется';
+          return;
+        }
+        const profit = revenue - cost;
+        const markupHundredths = cost === 0n ? 0n : roundedDivision(profit * 10000n, cost);
+        profitOutput.textContent = formatMoney(profit);
+        marginOutput.textContent = formatMargin(profit, revenue);
+        markupOutput.textContent = formatPercent(markupHundredths);
+        const tone = profit < 0n ? 'bad' : profit > 0n ? 'good' : '';
+        profitOutput.className = 'result-value ' + tone;
+        marginOutput.className = 'result-value ' + tone;
+        markupOutput.className = 'result-value ' + (cost === 0n ? '' : tone);
+        statusOutput.textContent = profit < 0n ? 'Получен валовой убыток.' : profit === 0n ? 'Валовая прибыль равна нулю.' : 'Расчёт выполнен. Все суммы без НДС.';
+        // Только успешный расчёт с ненулевой выручкой попадает в историю.
+        saveHistory({
+          revenue: formatMoney(revenue),
+          cost: formatMoney(cost),
+          profit: formatMoney(profit),
+          margin: marginOutput.textContent,
+          markup: markupOutput.textContent
+        });
+      } catch (error) {
+        showError(error.message || 'Не удалось выполнить расчёт. Проверьте данные.', error.fieldInput);
+      }
+    });
+
+    document.getElementById('clear').addEventListener('click', function() {
+      form.reset();
+      clearError();
+      resetResults();
+      revenueInput.focus();
+    });
+
+    // Кнопка «±» позволяет вводить отрицательные тестовые суммы на Android,
+    // где цифровая клавиатура с inputmode="decimal" не содержит минуса.
+    // При расчёте отрицательная сумма будет отклонена с понятным сообщением.
+    document.querySelectorAll('.sign-toggle').forEach(function(button) {
+      button.addEventListener('click', function() {
+        const input = document.getElementById(button.dataset.input);
+        const current = input.value.trim();
+        input.value = /^[−-]/.test(current) ? current.slice(1) : '-' + current;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      });
+    });
+
+    // Сбрасываем устаревший результат, если пользователь меняет исходные данные.
+    [revenueInput, costInput].forEach(function(input) {
+      input.addEventListener('input', function() {
+        clearError();
+        resetResults('Данные изменены. Нажмите «Рассчитать» для нового расчёта.');
+      });
+    });
+  </script>
+</body>
+</html>
