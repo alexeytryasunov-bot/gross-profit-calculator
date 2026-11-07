@@ -434,5 +434,172 @@
       });
     });
   </script>
+<script>
+(() => {
+  'use strict';
+
+  const costField = document.getElementById('cost').closest('.field');
+
+  costField.insertAdjacentHTML('afterend', `
+    <div class="field">
+      <label for="delivery">Дополнительные расходы (доставка) без НДС</label>
+      <div class="input-wrap">
+        <button type="button" class="sign-toggle" data-input="delivery">±</button>
+        <input id="delivery" type="text" inputmode="decimal"
+               autocomplete="off" placeholder="Например, 1 000,00">
+        <span class="rub" aria-hidden="true">₽</span>
+      </div>
+      <small class="hint">При отсутствии расходов оставьте поле пустым</small>
+    </div>
+  `);
+
+  const deliveryInput = document.getElementById('delivery');
+
+  document.querySelector('.results .grid').insertAdjacentHTML(
+    'beforeend', `
+    <div class="result-box markup-box">
+      <span class="result-label">Прибыль после доставки</span>
+      <output id="profitAfterDelivery" class="result-value">—</output>
+    </div>
+  `);
+
+  const netOutput = document.getElementById('profitAfterDelivery');
+
+  document.querySelector('.formula').insertAdjacentHTML(
+    'beforeend',
+    '<br>Прибыль после доставки = Валовая прибыль − Стоимость доставки'
+  );
+
+  function deliveryValue() {
+    return deliveryInput.value.trim() === ''
+      ? 0n
+      : parseRubles(
+          deliveryInput.value,
+          'Дополнительные расходы (доставка)',
+          deliveryInput
+        );
+  }
+
+  function clearDeliveryHighlight() {
+    deliveryInput.closest('.field').classList.remove('invalid');
+    deliveryInput.removeAttribute('aria-invalid');
+    deliveryInput.removeAttribute('aria-errormessage');
+  }
+
+  function clearNetOutput() {
+    netOutput.textContent = '—';
+    netOutput.className = 'result-value';
+  }
+
+  form.addEventListener('submit', (event) => {
+    clearDeliveryHighlight();
+
+    try {
+      deliveryValue();
+    } catch (error) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      clearError();
+      showError(
+        error.message || 'Ошибка доставки.',
+        error.fieldInput || deliveryInput
+      );
+      clearNetOutput();
+    }
+  }, true);
+
+  const originalRender = renderHistory;
+
+  renderHistory = function() {
+    originalRender();
+
+    const cards = document.querySelectorAll('.history-record dl');
+
+    historyEntries.slice().reverse().forEach((entry, index) => {
+      const dl = cards[index];
+      if (!dl) return;
+
+      const costRow = dl.querySelectorAll('dd')[1];
+
+      if (costRow) {
+        const label = document.createElement('dt');
+        label.textContent = 'Дополнительные расходы (доставка) без НДС';
+
+        const value = document.createElement('dd');
+        value.textContent = entry.delivery || '—';
+
+        costRow.after(label, value);
+      }
+
+      const label = document.createElement('dt');
+      label.textContent = 'Прибыль после доставки';
+
+      const value = document.createElement('dd');
+      value.textContent = entry.profitAfterDelivery || '—';
+
+      if (value.textContent.startsWith('−')) {
+        value.classList.add('bad');
+      }
+
+      dl.append(label, value);
+    });
+  };
+
+  renderHistory();
+
+  const originalSave = saveHistory;
+
+  saveHistory = function(entry) {
+    const revenue = parseRubles(
+      revenueInput.value, 'Выручка без НДС', revenueInput
+    );
+
+    const cost = parseRubles(
+      costInput.value, 'Себестоимость без НДС', costInput
+    );
+
+    const delivery = deliveryValue();
+    const net = revenue - cost - delivery;
+
+    netOutput.textContent = formatMoney(net);
+
+    netOutput.className = 'result-value ' +
+      (net < 0n ? 'bad' : net > 0n ? 'good' : '');
+
+    entry.delivery = formatMoney(delivery);
+    entry.profitAfterDelivery = formatMoney(net);
+
+    originalSave(entry);
+  };
+
+  [revenueInput, costInput, deliveryInput].forEach((input) => {
+    input.addEventListener('input', () => {
+      clearDeliveryHighlight();
+      clearNetOutput();
+    });
+  });
+
+  document.getElementById('clear').addEventListener('click', () => {
+    clearDeliveryHighlight();
+    clearNetOutput();
+  });
+
+  deliveryInput.closest('.field')
+    .querySelector('.sign-toggle')
+    .addEventListener('click', () => {
+      const current = deliveryInput.value.trim();
+
+      deliveryInput.value = /^[−-]/.test(current)
+        ? current.slice(1)
+        : '-' + current;
+
+      deliveryInput.dispatchEvent(
+        new Event('input', { bubbles: true })
+      );
+
+      deliveryInput.focus();
+    });
+})();
+</script>
 </body>
 </html>
